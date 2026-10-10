@@ -1,0 +1,39 @@
+# GameMod MCP 运行依赖
+#
+# 只装这两个就能跑。引擎解析器（PE / IL2CPP / Mono / UE）全部手写，
+# 只用 Python 标准库，不依赖 pefile / lief / 反编译框架。
+#
+#   pip install -r requirements.txt
+#
+# ── 可选能力（**故意不列在这里**，装上就启用、没装则如实报不可用）──
+#
+# 本项目有两处**可选**依赖，它们不属于「跑起来的最低要求」，所以按
+# AGENTS.md §2.4（运行期只依赖 mcp + frida）不写进本文件。缺了不影响
+# 其它能力：`get_diagnostics` 会明确报告可用性，对应工具返回安装指引
+# 而不是抛异常。
+#
+#   1) 反编译（仅 Mono）—— 看 `get_diagnostics.decompiler.available`
+#        dotnet tool install --global ilspycmd
+#
+#   2) 弱视觉（截图 + OCR）—— 看 `get_diagnostics.screen`
+#        截图（二选一，dxcam 对全屏独占更稳）：
+#          pip install dxcam
+#          pip install mss
+#        OCR（二选一，rapidocr 中文更好）：
+#          pip install rapidocr-onnxruntime
+#          # 或装 Tesseract-OCR（含 chi_sim 语言包）+ pip install pytesseract
+#        按窗口标题定位还需要：
+#          pip install pywin32
+#
+# 装上后无需任何配置：capture_screen / ocr / probe_log 立即可用。
+
+# ⚠️ mcp **必须 <2**（打包分享包时才发现的真实缺陷）
+# 本代码用的是 mcp **1.x** 的 API：`from mcp.server.fastmcp import FastMCP`。
+# 而 PyPI 上的 `mcp` 已经有 2.x（最新 2.3.0），其中 FastMCP 被改名为
+# MCPServer（`mcp.server.mcpserver`），导入路径变了。
+# 只写 `mcp>=1.0.0` 的话，全新环境会装到 2.x 然后**直接 import 失败**：
+#     ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+# 本机一直没暴露，是因为本机早就装了 1.26.0（已满足 >=1.0.0，pip 不会升级）。
+# 实测：干净 venv + 本文件旧的约束 → 装出 2.3.0 → 服务器起不来。
+mcp>=1.0.0,<2
+frida>=16.0.0

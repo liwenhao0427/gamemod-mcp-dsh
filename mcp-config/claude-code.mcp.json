@@ -1,0 +1,17 @@
+{
+  "_说明": "Claude Code 的 MCP 配置。放到项目根目录的 .mcp.json，或用户级 ~/.claude.json 的 mcpServers 字段里。把 ABSOLUTE_PATH 换成 GameModMCP 文件夹的真实绝对路径。",
+  "mcpServers": {
+    "gamemod": {
+      "command": "python",
+      "args": [
+        "ABSOLUTE_PATH/src/gamemod_mcp/server.py"
+      ],
+      "env": {
+        "PYTHONPATH": "ABSOLUTE_PATH/src",
+        "PYTHONUTF8": "1",
+        "PYTHONUNBUFFERED": "1",
+        "GAMEMOD_LOG_LEVEL": "INFO"
+      }
+    }
+  }
+}

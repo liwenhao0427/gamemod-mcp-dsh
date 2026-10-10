@@ -1,0 +1,31 @@
+# 统一换行符：仓库内一律存 LF，检出也是 LF。
+#
+# 为什么需要显式声明（而不是靠 git 的 core.autocrlf）
+# ---------------------------------------------------------------
+# 本项目有多处**逐字节比较**：
+#   · `verify_tool_inventory.py` 比对 `~/.dsh/skills/` 里的 skill 副本
+#     与仓库内那份是否**逐字节相同**；
+#   · `verify_mcp_resources.py` 比对 `gamemod://guide` 资源与磁盘上的
+#     SKILL.md 是否逐字节相同。
+# 如果检出时的换行符取决于各人机器上的 `core.autocrlf`，这些比较的
+# 结果就会**因人而异** —— 同一个提交在 A 机器全绿、在 B 机器报红。
+# 显式写死 eol=lf 可以消掉这个变量。
+#
+# 注意：本项目要求「UTF-8 无 BOM」（`devtools/check_encoding.ps1` 强制），
+# 这里只管换行符，不改编码。
+* text=auto eol=lf
+
+# 二进制文件不参与换行符转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.zip binary
+*.dll binary
+*.exe binary
+*.so binary
+*.dylib binary
+*.sqlite binary
+*.whl binary

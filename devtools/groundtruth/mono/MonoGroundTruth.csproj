@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    独立真值提取器（用于交叉验证 gamemod_mcp.engine.mono_meta）。
+
+    刻意**不复用**被测代码：这里用微软官方的 System.Reflection.Metadata
+    （ECMA-335 的官方实现）读取同一个托管程序集，导出 JSON，
+    再由 devtools/verify_mono.py 与自研解析器的结果逐项比对。
+
+    只依赖 .NET 共享框架，无需 NuGet 还原。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>MonoGroundTruth</AssemblyName>
+    <RootNamespace>MonoGroundTruth</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+</Project>

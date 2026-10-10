@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gamemod-mcp"
+version = "1.0.0"
+description = "游戏 Mod 开发 MCP 服务器：元数据优先定位 Hook 落点，支持 IL2CPP / Mono / Unreal"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["mcp", "game-mod", "il2cpp", "mono", "unreal", "frida", "reverse-engineering"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Topic :: Software Development :: Debuggers",
+]
+
+# 只依赖 MCP 协议库与 Frida。
+# 引擎解析（PE / IL2CPP / Mono / UE）全部手写，只用标准库，不引入 pefile / lief。
+dependencies = [
+    # mcp 必须 <2：本代码用 1.x 的 `mcp.server.fastmcp.FastMCP`；
+    # 2.x 把它改名成 MCPServer（`mcp.server.mcpserver`），导入路径变了。
+    # 只写 `>=1.0.0` 会让全新环境装到 2.x 然后 import 失败
+    # —— 打包分享包时实测到（干净 venv → 2.3.0 → 服务器起不来）。
+    "mcp>=1.0.0,<2",
+    "frida>=16.0.0",
+]
+
+# 这里曾有两个 optional-dependencies，P3 复核后删除（都是「装了也没人用」）：
+#   · `disasm = ["capstone"]` —— 全仓库 0 处 `import capstone`，没有指令级分析；
+#   · `dev = ["pytest"]` —— 验收套件是 devtools/ 下的普通脚本，从不 import pytest。
+# 真值生成器需要 .NET，不是 pyproject 能表达的可选依赖（见 devtools/groundtruth/）。
+
+[project.scripts]
+gamemod-mcp = "gamemod_mcp.server:main"
+
+# 这里曾有一个 `[project.urls] Documentation = "https://github.com/example/..."`：
+# 占位符，指向 example 组织。没有真实仓库地址就不写，宁可缺字段也不放假链接。
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# agent.js 是运行时探针，必须打进包（server 会读它）
+[tool.setuptools.package-data]
+gamemod_mcp = ["runtime/*.js"]

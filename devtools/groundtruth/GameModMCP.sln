@@ -1,0 +1,29 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "mono", "mono", "{CE7B134D-4DD1-4595-AABA-AFA9FD7D1879}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MonoGroundTruth", "mono\MonoGroundTruth.csproj", "{B8BCF3E0-34C4-DF00-D3CB-C1802B8A4545}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B8BCF3E0-34C4-DF00-D3CB-C1802B8A4545}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B8BCF3E0-34C4-DF00-D3CB-C1802B8A4545}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B8BCF3E0-34C4-DF00-D3CB-C1802B8A4545}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B8BCF3E0-34C4-DF00-D3CB-C1802B8A4545}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B8BCF3E0-34C4-DF00-D3CB-C1802B8A4545} = {CE7B134D-4DD1-4595-AABA-AFA9FD7D1879}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {C1E0F2F6-423B-4300-A3B6-6F349AAB3FA1}
+	EndGlobalSection
+EndGlobal

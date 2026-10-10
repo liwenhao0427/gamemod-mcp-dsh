@@ -1,0 +1,43 @@
+# GameMod MCP 组合包层：把「Python 工具链」与「MCP 客户端」两行一起插入。
+#
+# 为什么要两行而不是一行
+# ---------------------------------------------------------------
+# mcp-client 行需要启动一个**已经装好 mcp + frida 的** Python 解释器。
+# 如果直接把它指向系统 python，对方机器上十有八九没装这两个包，
+# 而 `failOnStartupError` 会让整行激活失败 —— 也就是「装完就能用」不成立。
+#
+# 所以第一行 `gamemod-toolchain` 负责**把依赖准备好**，并在完成后
+# 把解释器路径以服务形式发布出去；第二行用 `inject` 声明依赖它，
+# 于是 Loader 会让它一直 PENDING，直到服务就绪才启动。
+#
+# 这不是取巧：`inject` 决定挂载顺序（而不是 YAML 里的行序），
+# 而 `!!js` 的 config 是在「该行声明的注入已激活」之后才求值的
+# —— 见 docs/cordis-primer 的 Loader 配置一节。
+# 两个机制叠在一起，才保证「先装依赖、再拉起服务器」。
+#
+# 说明：这里**不写任何绝对路径**。解释器、包根目录、PYTHONPATH 全部
+# 由 gamemod-toolchain 在运行时算出来（它用 import.meta.url 定位自己
+# 所在的包目录），所以同一个包在任何人的机器上、任何安装位置都能用。
+
+- insert:
+    # ── 1/2 准备 Python 侧（幂等；已就绪时毫秒级返回）────────────────
+    - id: gamemod-toolchain
+      name: 'gamemod-mcp'
+
+    # ── 2/2 接入 MCP 客户端 ────────────────────────────────────────────
+    - id: mcp-gamemod
+      name: '@deepseek-ai/dsh-mcp-client'
+      # 等 gamemod-toolchain 发布服务后再启动（否则解释器还没装好）。
+      inject: [gamemodToolchain]
+      config:
+        serverName: gamemod
+        transport: stdio
+        command: !!js ctx.gamemodToolchain.python
+        args: !!js ctx.gamemodToolchain.serverArgs
+        cwd: !!js ctx.gamemodToolchain.root
+        env: !!js ctx.gamemodToolchain.env
+        # 依赖由上一行保证，起不来就是真故障，应当**响亮地失败**
+        # 而不是留下一个「工具不见了但没人说为什么」的静默状态。
+        failOnStartupError: true
+        # 建索引 / 反编译整个程序集比默认 60s 慢，放宽到 5 分钟。
+        toolCallTimeoutMs: 300000

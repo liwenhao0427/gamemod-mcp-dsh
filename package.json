@@ -1,0 +1,37 @@
+{
+  "name": "gamemod-mcp",
+  "version": "1.0.0",
+  "description": "游戏 Mod 开发 MCP 服务器（IL2CPP / Mono / Unreal），以 DSH 组合包形式分发：安装即自动准备好 Python 侧依赖并接入 mcp__gamemod__* 工具。",
+  "type": "module",
+  "license": "MIT",
+  "icon": "./icon.svg",
+  "keywords": [
+    "dsh-bundle",
+    "mcp",
+    "game-mod",
+    "il2cpp",
+    "mono",
+    "unreal",
+    "frida"
+  ],
+  "exports": {
+    ".": "./index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json"
+  },
+  "files": [
+    "index.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "src/**/*.py",
+    "skills/**/*.md",
+    "requirements.txt"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

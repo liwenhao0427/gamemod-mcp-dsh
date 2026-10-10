@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "GameMod MCP",
+    "description": "游戏 Mod 开发工具集：元数据优先定位 Hook 落点，注入运行时探针读写字段与内存。"
+  }
+}

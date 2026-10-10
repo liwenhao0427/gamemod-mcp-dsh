@@ -1,0 +1,87 @@
+# ============================================================
+# GameModMCP 版本控制规则
+#
+# 入库的是「源码 / 文档 / 测试脚本」。
+# 不入库的是「本机跑出来的缓存与构建产物」—— 体积大且每次运行都在变。
+# ============================================================
+
+# ---- 元数据索引缓存（实测单个 25 MB，且每次解析都会重新生成） ----
+.cache/
+.cache-test/
+.cache-adapt-test/
+.cache-lazy-test/
+# 多游戏扫描（report_multi_game_matrix.py）的产物：矩阵 JSON、日志、
+# 外加临时探针脚本。都是本机跑出来的东西，不进仓库。
+.cache-matrix/
+# 调研阶段抓下来的第三方网页/源码快照（子 Agent 用）。
+# 是「外部材料的本地副本」，不是交付物；结论已沉淀进 docs/ 与 agent_logs/。
+.cache-research/
+# 真机验收时的现场产物：截图、一次性点击/发键脚本、诊断脚本。
+# 结论沉淀进 docs/ 与 SKILL.md 配方，脚本本身不入库。
+.cache-verify/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+
+# ---- Python 字节码与打包产物 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# ---- .NET 构建产物（devtools/groundtruth） ----
+bin/
+obj/
+
+# ---- 测试残留 ----
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- 一次性侦察/量数脚本 ----
+# 这类脚本是「为了回答一个具体问题临时写的」，结论应沉淀进
+# docs/ 或 devtools/bench_index.py，脚本本身不入库。
+# 教训：本轮曾留下 11 个 _probe_*.py 待提交，靠人工记得删是不可靠的。
+devtools/_probe_*.py
+
+# ---- 归档侦察脚本的运行产物 ----
+# archive/probes/ 下的脚本自己会写 .log / .jsonl（逐轮结果落盘），
+# 路径就是脚本旁边（`Path(__file__).with_suffix(".log")`）。
+# 它们每次运行都在变、体积会涨，与「脚本可复现」无关，不入库。
+devtools/archive/probes/*.log
+devtools/archive/probes/*.jsonl
+
+# ---- 编辑器 / 操作系统杂项 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp
+*~
+
+# ---- 临时提交信息文件 ----
+# 教训：用 git commit -F <file> 时若文件写在仓库内，git add -A 会把它
+# 一起入库（本轮踩了两次）。以后统一用仓库外的临时路径，并在这里兜底。
+commit_msg*.txt
+
+# ---- 分享包（由 devtools/build_share.py 生成）----
+# 实际落在**仓库同级**（../GameModMCP-share），本来就不在库里；
+# 这几行是兜底：万一有人把它生成到仓库内也不会误入库。
+# ---- 已废弃的分发产物（分享包）----
+# 分发方式已改为 DSH 组合包（package.json + cordis.patch.yml + index.js），
+# 不再生成 zip 分享包。这几行留着兜底：万一旧产物还在同级目录，
+# 也不会被误入库。
+# 注意：分享包里曾有整套 *.md 副本，若放进仓库会被
+# verify_tool_inventory.py 的「扫描所有 *.md」连带扫到。
+GameModMCP-share/
+GameModMCP-share.zip
+
+# ---- 组合包安装产物 ----
+# 托管 venv 建在 $DSH_HOME 下（不在仓库内）；这里是兜底，
+# 万一有人把 venv 建到了仓库里也不会误入库。
+.gamemod-venv/
