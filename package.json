@@ -25,6 +25,7 @@
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
+    "LICENSE",
     "src/**/*.py",
     "skills/**/*.md",
     "requirements.txt"

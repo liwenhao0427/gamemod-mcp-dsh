@@ -661,7 +661,7 @@ IL2CPP 和 Mono 是**两个根本不同的元数据体系**：
 本项目本身就是一个 **DSH 组合包**（bundle）。在 DSH 里装它就完事了：
 
 ```
-把 E:\project\gamemod-mcp-dsh 这个目录交给 DSH，让 Agent 安装
+把本项目目录（clone 下来的那份）交给 DSH，让 Agent 安装
 ```
 
 Agent 侧的等价操作是 `plugin_manager` 的 `install_bundle`，
