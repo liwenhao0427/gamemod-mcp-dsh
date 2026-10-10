@@ -33,7 +33,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -157,6 +157,29 @@ function venvPython(venvDir) {
 }
 
 /**
+ * venv 是否**真的能用**（不是只看 `python.exe` 在不在）。
+ *
+ * 为什么不能只用 existsSync
+ * ---------------------------------------------------------------
+ * 冷启动实测踩到过：venv 目录在、`python.exe` 也在，但 `pyvenv.cfg`
+ * 是**空的**（venv 建到一半被打断），于是这个解释器**一跑就报
+ * `No pyvenv.cfg file`** —— 连 `--version` 都执行不了。
+ *
+ * 而旧代码只查 `existsSync(python)`，于是**跳过创建**、直接往里装依赖，
+ * 一路失败。更糟的是这个状态**会一直保留**：之后每次启动都看到
+ * 「python.exe 在」，于是永远不再尝试重建 —— 一次被打断的首装
+ * 就让这个包**永久装不上**，除非用户手工删目录。
+ *
+ * 所以判据必须是「这个解释器能不能跑起来」，而不是「文件在不在」。
+ * @returns 可用时为 true。
+ */
+function venvUsable(python) {
+  if (!existsSync(python)) return false
+  const r = run(python, ['-c', 'print(1)'], { timeout: 60_000 })
+  return !r.error && r.status === 0
+}
+
+/**
  * 探测解释器是否**真的能跑本项目的服务器**。
  *
  * 只查「包装上了没」不够：包在但版本不对（mcp 2.x）时服务器照样起不来，
@@ -166,6 +189,38 @@ function venvPython(venvDir) {
 function probeServer(python) {
   const result = run(python, ['-c', PROBE], { timeout: 120_000 })
   return !result.error && result.status === 0
+}
+
+/**
+ * 确认 venv 里的 pip 可用，缺了就补上。
+ *
+ * 为什么不能假定 `python -m venv` 建完就有 pip
+ * ---------------------------------------------------------------
+ * 冷启动实测踩到过：`python -m venv` **返回 0**、`python.exe` 也在，
+ * 但紧接着 `python -m pip` 报 `No module named pip`，于是整个安装失败
+ * —— 而这是**对方第一次安装**必然要走的路径，一次偶发就等于装不上。
+ * 单独连测 10 轮不复现，说明它与并发（ensurepip 解压到临时目录）有关，
+ * 是**偶发**而非必然 —— 偶发的基础设施问题更应该由代码兜住，
+ * 而不是赌它不发生。
+ *
+ * 所以这里显式补一次 `ensurepip`（标准库自带的引导器，不依赖网络），
+ * 补完再复验。
+ * @returns pip 可用时为 true；补不上则抛错（不静默继续）。
+ */
+function ensurePip(python) {
+  const ok = (r) => !r.error && r.status === 0
+  if (ok(run(python, ['-m', 'pip', '--version'], { timeout: 120_000 }))) return true
+
+  const boot = run(python, ['-m', 'ensurepip', '--upgrade', '--default-pip'],
+                   { timeout: 300_000 })
+  if (!ok(run(python, ['-m', 'pip', '--version'], { timeout: 120_000 }))) {
+    throw new Error(
+      'gamemod-mcp: venv 里没有可用的 pip，且用 ensurepip 引导失败。\n'
+      + tail(`${boot.stdout ?? ''}\n${boot.stderr ?? ''}`)
+      + `\n  可手动修复：\n    "${python}" -m ensurepip --upgrade --default-pip`,
+    )
+  }
+  return true
 }
 
 /** pip 安装（--no-input 防止它在无人值守的启动流程里卡住等输入）。 */
@@ -207,18 +262,39 @@ export async function apply(ctx, rawConfig) {
   } else {
     ctx.logger.info(`gamemod-mcp: 正在准备 Python 环境（${label}），首次安装可能需要一两分钟…`)
 
-    if (!existsSync(python)) {
+    if (!venvUsable(python)) {
       mkdirSync(stateDir, { recursive: true })
+      // 目录在但解释器跑不起来 = 上次建到一半被打断（实测过：pyvenv.cfg
+      // 为空，连 `--version` 都报 No pyvenv.cfg file）。这种残留必须**清掉
+      // 重建**，否则 `python -m venv` 会因为目录非空而拒绝/留下混合状态，
+      // 而下次启动又会看到「python.exe 在」从而跳过创建 —— 永久卡死。
+      if (existsSync(venvDir)) {
+        ctx.logger.warn('gamemod-mcp: 发现不可用的 venv 残留，正在重建…')
+        try {
+          rmSync(venvDir, { recursive: true, force: true })
+        } catch (error) {
+          throw new Error(
+            `gamemod-mcp: 无法删除损坏的 venv（${venvDir}）：${String(error)}\n`
+            + '  请手工删掉该目录后重启 DSH。',
+          )
+        }
+      }
       const base = findBasePython(config.python)
       ctx.logger.info(`gamemod-mcp: 用 ${base} 创建专用 venv：${venvDir}`)
       const created = run(base, ['-m', 'venv', venvDir], { timeout: 300_000 })
-      if (created.error || created.status !== 0 || !existsSync(python)) {
+      // 判据同样是「能不能跑」，不是「文件在不在」—— venv 可能返回 0
+      // 却留下一个不可用的解释器（冷启动实测）。
+      if (created.error || created.status !== 0 || !venvUsable(python)) {
         throw new Error(
           'gamemod-mcp: 创建 venv 失败。\n'
-          + tail(`${created.stdout ?? ''}\n${created.stderr ?? ''}`),
+          + tail(`${created.stdout ?? ''}\n${created.stderr ?? ''}`)
+          + `\n  可手工重试：\n    "${base}" -m venv "${venvDir}"`,
         )
       }
     }
+
+    // 不能假定 venv 建完就有 pip（冷启动实测踩到过，见 ensurePip 注释）。
+    ensurePip(python)
 
     const installed = pipInstall(python, specs)
     if (installed.error || installed.status !== 0) {

@@ -235,6 +235,44 @@ check("index.js 的 REQUIRED 含 mcp>=1.0.0,<2",
 check("index.js 的探测导入 mcp.server.fastmcp（1.x 路径）",
       "mcp.server.fastmcp" in plugin_text,
       "这是「服务器真能起来」的最小充分检查")
+# 冷启动实测踩到过：`python -m venv` 返回 0、python.exe 也在，但紧接着
+# `python -m pip` 报 No module named pip —— 而这是对方**第一次安装**必然
+# 走的路径，一次偶发就等于装不上。所以必须显式引导 pip，不能假定它存在。
+check("index.js 显式引导 pip（不假定 venv 建完就有）",
+      "ensurepip" in plugin_text,
+      "python -m venv 可能返回 0 但 pip 不可用（冷启动实测），必须有兜底")
+# 顺序也是判据：把 ensurePip 放在 pipInstall **之后**等于没做
+# （那时安装已经失败了）。这类「调了但没用」的缺陷只有查顺序才看得见。
+#
+# ⚠️ 必须匹配**调用语句**，不能只找 `ensurePip(python)` 这个子串 ——
+# 函数定义 `function ensurePip(python) {` 里也含这个子串，而定义永远在
+# 最前面，于是无论调用点在哪，断言都恒真。第一版就是这么写的，
+# 非空转反证当场把它抓了出来（把调用挪到安装之后，断言**没有**报红）。
+_call_ensure = re.search(r"^[ \t]+ensurePip\(python\)[ \t]*$", plugin_text, re.M)
+_call_install = re.search(r"^[ \t]+const installed = pipInstall\(python, specs\)[ \t]*$",
+                          plugin_text, re.M)
+check("能找到 ensurePip 的调用语句", _call_ensure is not None)
+check("能找到 pipInstall 的调用语句", _call_install is not None)
+check("引导 pip 的调用在安装之前（否则等于没做）",
+      _call_ensure is not None and _call_install is not None
+      and _call_ensure.start() < _call_install.start(),
+      f"ensurePip@{_call_ensure.start() if _call_ensure else None} "
+      f"vs pipInstall@{_call_install.start() if _call_install else None}")
+# 补不上 pip 时必须抛错，不许静默继续（否则会以「依赖装失败」的模糊
+# 面目出现，而真正原因是 pip 本身不可用）。
+check("pip 引导失败时抛错而不是静默继续",
+      "且用 ensurepip 引导失败" in plugin_text)
+# 冷启动实测踩到过一个**永久性**缺陷：venv 目录在、python.exe 也在，
+# 但 pyvenv.cfg 是空的（venv 建到一半被打断），解释器一跑就报
+# `No pyvenv.cfg file`。旧代码只查 `existsSync(python)` ⇒ 跳过创建 ⇒
+# 直接装依赖 ⇒ 失败；而且**之后每次启动都看到 python.exe 在**，
+# 于是永远不再重建 —— 一次被打断的首装就让这个包永久装不上。
+check("index.js 用「解释器能跑」而不是「文件在不在」判断 venv",
+      "function venvUsable" in plugin_text and "venvUsable(python)" in plugin_text,
+      "只看 existsSync 会因半成品 venv 永久卡死（冷启动实测）")
+check("index.js 会清掉不可用的 venv 残留再重建",
+      "rmSync(venvDir" in plugin_text,
+      "python -m venv 遇到非空目录会留下混合状态，必须先清")
 req = (ROOT / "requirements.txt").read_text(encoding="utf-8")
 check("requirements.txt 同样带 <2", "mcp>=1.0.0,<2" in req)
 pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -371,7 +409,127 @@ try {{
                   (r.stdout or r.stderr or "")[-300:])
 
 # ================================================================
-section("6. 组合包注册的 skill 必须盖过 ~/.dsh/skills/ 里的旧副本")
+section("6. 行为：损坏的 venv 必须被自愈（不能永久卡死）")
+
+# 这是冷启动实测抓到的**永久性**缺陷，所以单独做行为验收：
+# 造一个真实的半成品 venv（目录在、python.exe 在、pyvenv.cfg 空），
+# 看插件是「跳过创建然后一路失败」还是「清掉重建」。
+#
+# 只 grep `venvUsable` 是不够的 —— 那只能证明函数存在，不能证明它被用对。
+# 真正的判据是：拿一个坏 venv 喂进去，它**修好了**。
+if not node_available():
+    check("node 可用（跑自愈行为测试）", False, warn_only=True)
+else:
+    import tempfile as _tf
+    scratch = _tf.mkdtemp(prefix="gamemod-heal-", dir=str(ROOT / ".cache-test"))
+    scratch_dsh = Path(scratch) / "dshhome"
+    (scratch_dsh).mkdir(parents=True, exist_ok=True)
+    broken_venv = scratch_dsh / "gamemod-mcp" / "venv"
+    scripts = broken_venv / "Scripts"
+    scripts.mkdir(parents=True, exist_ok=True)
+
+    # 造半成品：**先建一个真的 venv，再把 pyvenv.cfg 清空**。
+    #
+    # 第一版是「拷一个 python.exe 过去、不写 pyvenv.cfg」，但那**造不出坏 venv**
+    # —— 实测 rc=0（被拷过去的解释器会回退到基础安装，照跑不误），
+    # 于是这一节测的是个正常环境，结论毫无意义（非空转前提当场报红）。
+    # 真正复现实测形态的做法是：venv 建好之后把 pyvenv.cfg **清空**
+    # —— 实测这会让解释器以 rc=107 报
+    # `Cannot find home in '...pyvenv.cfg'`。
+    base_python = shutil.which("python") or sys.executable
+    made = subprocess.run([base_python, "-m", "venv", str(broken_venv)],
+                          capture_output=True, text=True, encoding="utf-8",
+                          errors="replace", timeout=600)
+    if made.returncode != 0:
+        check("能造出半成品 venv 用于测试", False,
+              (made.stderr or made.stdout or "")[-300:], warn_only=True)
+    else:
+        # 清空 pyvenv.cfg —— 这就是实测看到的「建到一半被打断」形态。
+        (broken_venv / "pyvenv.cfg").write_text("", encoding="utf-8")
+
+    # 确认它确实是坏的（否则这个测试本身没有意义）
+    probe_broken = subprocess.run(
+        [str(scripts / "python.exe"), "-c", "print(1)"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=60,
+    )
+    check("测试前提成立：造出的 venv 确实不可用",
+          probe_broken.returncode != 0,
+          f"rc={probe_broken.returncode}（若为 0 说明没造坏，本测试无效）")
+
+    heal = f'''
+const mod = await import({json.dumps((ROOT / "index.js").as_uri())});
+const logs = [];
+const ctx = {{
+  logger: {{ info: m => logs.push("INFO " + m), warn: m => logs.push("WARN " + m) }},
+  provide: () => {{}},
+  inject: () => {{}},
+}};
+try {{
+  await mod.apply(ctx, {{}});
+  console.log(JSON.stringify({{ ok: true, logs }}));
+}} catch (e) {{
+  console.log(JSON.stringify({{ ok: false, logs, error: String(e && e.message || e) }}));
+}}
+'''
+    env = dict(os.environ)
+    env["DSH_HOME"] = str(scratch_dsh)
+    fd, nodefile = _tf.mkstemp(suffix=".mjs", dir=str(ROOT / ".cache-test"))
+    os.close(fd)
+    Path(nodefile).write_text(heal, encoding="utf-8")
+    try:
+        r = subprocess.run(["node", nodefile], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
+                           env=env, cwd=str(ROOT), timeout=1800)
+        try:
+            out = json.loads(r.stdout.strip().splitlines()[-1])
+        except Exception:
+            out = {"ok": False, "logs": [],
+                   "error": (r.stdout or r.stderr or "")[-500:]}
+        joined = "\n".join(out.get("logs", []))
+
+        # ⚠️ 本节验的是「**坏 venv 被修好**」，不是「依赖装上了」。
+        #
+        # 两者要分开，否则这个脚本会依赖网络（pip install mcp+frida 约 40 MB）
+        # —— 整套验收就变得不可离线复现了。而「修 venv」发生在装依赖**之前**，
+        # 所以即使后面的安装因断网失败，venv 也已经被重建好，可以照常断言。
+        healed = scratch_dsh / "gamemod-mcp" / "venv"
+        healed_python = healed / "Scripts" / "python.exe"
+
+        check("日志里说明它识别出了残留并重建",
+              "残留" in joined or "重建" in joined,
+              "没有这句说明它可能是碰巧成功的，而不是真的走了自愈分支")
+        check("自愈后 pyvenv.cfg 存在且非空",
+              (healed / "pyvenv.cfg").is_file()
+              and (healed / "pyvenv.cfg").read_text(encoding="utf-8").strip() != "",
+              "空 pyvenv.cfg 正是坏 venv 的形态（实测 rc=107）")
+        # 这是本节的**核心判据**：重建出来的解释器真的能跑。
+        # 旧代码只看 existsSync，会跳过重建、留下这个坏解释器。
+        healed_ok = subprocess.run(
+            [str(healed_python), "-c", "print(1)"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=120,
+        )
+        check("自愈后的解释器真的能跑（旧代码会留下坏的那个）",
+              healed_ok.returncode == 0,
+              f"rc={healed_ok.returncode}")
+
+        if out.get("ok") is True:
+            check("依赖也装上了（网络可用）", True)
+        else:
+            # 装依赖失败**不算本节的失败** —— 它取决于网络，
+            # 而本节的主张在上一行已经验完了。但要如实说出来。
+            check("依赖安装（需要网络；本次未完成，不影响上面的自愈结论）",
+                  False, str(out.get("error", ""))[:200], warn_only=True)
+    finally:
+        try:
+            os.unlink(nodefile)
+        except OSError:
+            pass
+        shutil.rmtree(scratch, ignore_errors=True)
+
+# ================================================================
+section("7. 组合包注册的 skill 必须盖过 ~/.dsh/skills/ 里的旧副本")
 
 # 背景：旧机制是手工把 `skills/` 复制到 `~/.dsh/skills/`，而那份副本不在任何
 # 门禁范围内 —— 实测曾落后 139 行，开头还教 Agent 去调一个**已删除**的工具。
@@ -454,7 +612,7 @@ console.log(JSON.stringify({{ source: won.source, description: won.description }
                   (r.stdout or r.stderr or "")[-400:])
 
 # ================================================================
-section("7. 非空转反证：把 patch 改坏，断言必须报红")
+section("8. 非空转反证：把 patch 改坏，断言必须报红")
 
 def patch_is_bad(text: str) -> list[str]:
     """返回这条 patch 文本触发的**问题清单**（空 = 干净）。
@@ -497,7 +655,7 @@ check("反证：判据不是恒假（真实 patch 干净、坏 patch 报红）",
       patch_is_bad(patch_text) == [] and patch_is_bad(counter1) != [])
 
 # ================================================================
-section("8. 反证：真的把坏 patch 放到磁盘再跑一次静态检查")
+section("9. 反证：真的把坏 patch 放到磁盘再跑一次静态检查")
 
 # 上面第 6 节验的是**判据函数**；这一节验「脚本真的会用它去读文件」——
 # 否则可能出现「判据对、但脚本读错了文件」这种假绿。
